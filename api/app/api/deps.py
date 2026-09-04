@@ -1,3 +1,13 @@
+"""
+TODO(auth): DEV STUB — the API trusts the X-Seller-Id header without verifying
+it, so any caller can claim any seller_id. Deployed as-is with seed data only.
+Replace with a verified JWT before this holds real data.
+
+The shape is what matters and will not change: seller_id is resolved here, from
+the request's credentials, and injected downward. It is never a parameter a
+caller — or later, an agent tool — gets to choose.
+"""
+
 import uuid
 
 from fastapi import Depends, Header, HTTPException, status
@@ -6,14 +16,6 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.repositories.products import ProductRepository
 from app.services.products import ProductService
-
-"""
-DEV STUB. Replaced by real JWT auth before anything is deployed.
-
-The shape is what matters and will not change: seller_id is resolved here,
-from the request's credentials, and injected downward. It is never a
-parameter a caller — or later, an agent tool — gets to choose.
-"""
 
 
 def get_seller_id(x_seller_id: str | None = Header(default=None)) -> uuid.UUID:
