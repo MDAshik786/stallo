@@ -31,11 +31,33 @@ export default function AgentPage() {
   // The transcript is server state, not component state. Navigating away and
   // back replays it, and a run still awaiting an answer comes back resumable
   // — which is the whole reason runs are rows rather than React state.
-  const runs = useQuery({ queryKey: ["runs"], queryFn: () => api.listRuns(20) });
+  const runs = useQuery({
+    queryKey: ["runs"],
+    queryFn: () => api.listRuns(20),
+    // A run can finish while the seller is on another page. The default
+    // staleTime would then serve the pre-completion snapshot on return — the
+    // prompt visible, the answer missing. Always refetch on mount, and keep
+    // polling while anything is still running.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((r) => r.status === "running") ? 1500 : false,
+  });
   const actions = useQuery({ queryKey: ["actions"], queryFn: () => api.listActions(8) });
 
+  // Jump to the newest message without animating through a long history on
+  // first paint; charts change the height after mount, so wait a frame.
+  const settled = useRef(false);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!runs.data) return;
+    const behavior = settled.current ? "smooth" : "instant";
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        endRef.current?.scrollIntoView({ behavior: behavior as ScrollBehavior, block: "end" });
+        settled.current = true;
+      }),
+    );
+    return () => cancelAnimationFrame(id);
   }, [runs.data, sending]);
 
   function settle() {
