@@ -33,7 +33,7 @@ export default function AgentPage() {
       const without = prev.filter((t) => !(t.kind === "run" && t.run.id === run.id));
       const next: Turn[] = [...without, { kind: "run", run }];
       if (run.reply) next.push({ kind: "agent", text: run.reply });
-      if (run.error) next.push({ kind: "agent", text: `Something went wrong — ${run.error}` });
+      if (run.error) next.push({ kind: "agent", text: run.error });
       return next;
     });
     // the agent writes products and audit rows; both lists are now stale

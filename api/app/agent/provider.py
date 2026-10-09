@@ -46,8 +46,18 @@ def _ollama(system: str, utterance: str, tools: list[dict], history: list[dict])
         r = httpx.post(f"{OLLAMA_HOST}/api/chat", json=payload, timeout=180)
         r.raise_for_status()
     except httpx.HTTPError as exc:
+        # The agent runs on a local model, so the hosted demo has no model to
+        # reach. Say so plainly rather than leaking a connection error.
+        from app.config import settings
+
+        if settings.stallo_env != "local":
+            raise ModelUnavailable(
+                "The assistant runs on a local model, so it is not available in "
+                "the hosted demo. Clone the repo and run it locally to try it — "
+                "the README has the three commands."
+            ) from exc
         raise ModelUnavailable(
-            f"could not reach the model at {OLLAMA_HOST} — is `ollama serve` running?"
+            f"Could not reach the model at {OLLAMA_HOST}. Is `ollama serve` running?"
         ) from exc
 
     message = r.json().get("message", {})

@@ -14,6 +14,11 @@ want; shoppers see and control what the store knows about them.
 > trusts an `X-Seller-Id` header without verifying it, so any caller can claim
 > any seller. Seed data only; not suitable for real data until replaced.
 
+> **The assistant only runs locally.** It uses a local model via Ollama, so the
+> hosted demo has no model to reach and says so when you try. The storefront,
+> catalogue and product form all work there; for the agent, clone and run it
+> locally — three commands, below.
+
 Both API and database run on free tiers and sleep after inactivity, so the
 first request after an idle period can take up to a minute.
 
