@@ -49,12 +49,63 @@ export type ProductCreate = {
   stock_quantity?: number;
 };
 
+export type RunStatus =
+  | "running"
+  | "awaiting_input"
+  | "awaiting_approval"
+  | "completed"
+  | "rejected"
+  | "failed";
+
+export type Suspension = {
+  kind: "request_choice" | "request_confirmation";
+  field?: string;
+  prompt?: string;
+  options?: { value: string; label: string }[];
+  action?: string;
+  target_id?: string;
+  summary?: string;
+};
+
+export type AgentRun = {
+  id: string;
+  status: RunStatus;
+  utterance: string;
+  suspension: Suspension | null;
+  reply: string | null;
+  error: string | null;
+};
+
+export type AgentAction = {
+  id: string;
+  tool: string;
+  status: "success" | "failed" | "refused";
+  args: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  undoable: boolean;
+  undone: boolean;
+  duration_ms: number | null;
+  created_at: string;
+};
+
 export const api = {
   listProducts: (status?: ProductStatus) =>
     request<Product[]>(`/products${status ? `?status=${status}` : ""}`),
   getProduct: (id: string) => request<Product>(`/products/${id}`),
   createProduct: (body: ProductCreate) =>
     request<Product>("/products", { method: "POST", body: JSON.stringify(body) }),
+
+  startRun: (utterance: string) =>
+    request<AgentRun>("/agent/runs", {
+      method: "POST",
+      body: JSON.stringify({ utterance }),
+    }),
+  resumeRun: (id: string, body: { answer?: string; approved?: boolean }) =>
+    request<AgentRun>(`/agent/runs/${id}/resume`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  listActions: (limit = 25) => request<AgentAction[]>(`/agent/actions?limit=${limit}`),
 };
 
 export function formatPaise(paise: number): string {
