@@ -77,6 +77,7 @@ export type AgentRun = {
   reply: string | null;
   error: string | null;
   results: ToolResult[] | null;
+  messages: { role: string; content?: string; asked?: string }[] | null;
 };
 
 export type AgentAction = {

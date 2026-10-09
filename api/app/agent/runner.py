@@ -256,6 +256,14 @@ def resume(db: Session, seller_id: uuid.UUID, run: AgentRun,
         # and the model latches onto focus_product_id — it updated an existing
         # product instead of creating the one the seller actually asked for.
         filled = f"{run.utterance} — the {field} is {answer}"
+        # Keep the exchange so the transcript shows what was asked and
+        # answered. Without it the conversation reads as if the agent simply
+        # knew the price, which hides the whole point of suspending.
+        run.messages = [
+            *(run.messages or []),
+            {"role": "assistant", "asked": suspension.get("prompt") or f"Which {field}?"},
+            {"role": "user", "content": answer},
+        ]
         history = [
             {"role": "user", "content": run.utterance},
             {"role": "assistant", "content": suspension.get("prompt") or f"Which {field}?"},

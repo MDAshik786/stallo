@@ -30,12 +30,13 @@ class RunOut(BaseModel):
     reply: str | None
     error: str | None
     results: list[dict] | None
+    messages: list[dict] | None
 
     @classmethod
     def of(cls, run: AgentRun) -> "RunOut":
         return cls(id=run.id, status=run.status, utterance=run.utterance,
                    suspension=run.suspension, reply=run.reply, error=run.error,
-                   results=run.results)
+                   results=run.results, messages=run.messages)
 
 
 def _load(db: Session, seller_id: uuid.UUID, run_id: uuid.UUID) -> AgentRun:

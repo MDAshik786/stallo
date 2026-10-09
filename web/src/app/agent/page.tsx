@@ -201,6 +201,17 @@ function RunTurn({
   return (
     <>
       <Bubble side="seller">{run.utterance}</Bubble>
+
+      {/* A clarification that was answered: show both halves, or the
+          transcript reads as though the agent simply knew the value. */}
+      {(run.messages ?? []).map((m, i) =>
+        m.asked ? (
+          <Bubble key={`a${i}`} side="agent">{m.asked}</Bubble>
+        ) : m.role === "user" && m.content !== run.utterance ? (
+          <Bubble key={`u${i}`} side="seller">{m.content}</Bubble>
+        ) : null,
+      )}
+
       {run.reply && <Bubble side="agent">{run.reply}</Bubble>}
       {run.error && <Bubble side="agent">{run.error}</Bubble>}
 

@@ -20,3 +20,5 @@ out/
 .DS_Store
 .idea/
 .vscode/
+# generated marketing screenshots
+screenshots/
