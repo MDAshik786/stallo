@@ -52,8 +52,10 @@ Diwali" is answered with a question, because festival dates move every year
 and a confident wrong window is worse than asking.
 
 Clarification and approval are the same mechanism — a tool that suspends the
-run. The run is a row in Postgres, not React state, so a pending question
-survives a refresh, a closed tab, or tomorrow morning.
+run. The run is a row in Postgres and the chat holds no transcript of its own:
+it replays `GET /agent/runs` on mount. So a pending question survives a
+refresh, a navigation, a closed tab, or tomorrow morning, and comes back
+answerable.
 
 `publish` and `delete` are not reachable by the model. They execute only on a
 resume carrying the seller's decision, so no amount of typed "yes" authorises

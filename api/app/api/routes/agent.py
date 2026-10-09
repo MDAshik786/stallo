@@ -62,6 +62,23 @@ def resume_run(run_id: uuid.UUID, body: ResumeRun, db: Session = Depends(get_db)
     return RunOut.of(runner.resume(db, seller_id, run, body.answer, body.approved))
 
 
+@router.get("/runs", response_model=list[RunOut])
+def list_runs(limit: int = Query(default=20, ge=1, le=100),
+              db: Session = Depends(get_db),
+              seller_id: uuid.UUID = Depends(get_seller_id)) -> list[RunOut]:
+    """Recent runs, oldest first — the conversation, rebuilt from the server.
+
+    The client holds no transcript of its own. Navigating away and back, or
+    reloading, replays this; a run still awaiting an answer comes back with
+    its suspension intact and is resumable.
+    """
+    rows = list(db.scalars(
+        select(AgentRun).where(AgentRun.seller_id == seller_id)
+        .order_by(AgentRun.created_at.desc()).limit(limit)
+    ))
+    return [RunOut.of(r) for r in reversed(rows)]
+
+
 @router.get("/runs/{run_id}", response_model=RunOut)
 def get_run(run_id: uuid.UUID, db: Session = Depends(get_db),
             seller_id: uuid.UUID = Depends(get_seller_id)) -> RunOut:

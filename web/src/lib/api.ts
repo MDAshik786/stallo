@@ -131,6 +131,7 @@ export const api = {
   createProduct: (body: ProductCreate) =>
     request<Product>("/products", { method: "POST", body: JSON.stringify(body) }),
 
+  listRuns: (limit = 20) => request<AgentRun[]>(`/agent/runs?limit=${limit}`),
   startRun: (utterance: string) =>
     request<AgentRun>("/agent/runs", {
       method: "POST",
