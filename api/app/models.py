@@ -3,10 +3,11 @@ from datetime import datetime
 
 import uuid_utils
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, func,
+    Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text,
+    UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def uuid7() -> uuid.UUID:
@@ -83,6 +84,8 @@ class AgentRun(Base, TimestampMixin):
     suspension: Mapped[dict | None] = mapped_column(JSONB)
     # conversation so far, so a resume continues rather than restarts
     messages: Mapped[list | None] = mapped_column(JSONB)
+    # tool results, so the client can draw a chart instead of only reading prose
+    results: Mapped[list | None] = mapped_column(JSONB)
     reply: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
 
@@ -132,4 +135,65 @@ class AgentAction(Base):
     __table_args__ = (
         CheckConstraint("status in ('success','failed','refused')", name="ck_agent_actions_status"),
         Index("ix_agent_actions_seller_created", "seller_id", "created_at"),
+    )
+
+
+class Order(Base, TimestampMixin):
+    """A shopper's order. Deliberately holds a display name and nothing else —
+    no email, no address, no phone. A demo store has no business collecting
+    what it does not need."""
+
+    __tablename__ = "orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    seller_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sellers.id", ondelete="CASCADE"), nullable=False
+    )
+    order_number: Mapped[str] = mapped_column(String(24), nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="paid")
+    total_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    placed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+    __table_args__ = (
+        CheckConstraint("total_paise >= 0", name="ck_orders_total_non_negative"),
+        CheckConstraint(
+            "status in ('pending','paid','shipped','delivered','cancelled')",
+            name="ck_orders_status",
+        ),
+        UniqueConstraint("seller_id", "order_number", name="uq_orders_seller_number"),
+        # every analytics query filters by seller then slices by date
+        Index("ix_orders_seller_placed", "seller_id", "placed_at"),
+    )
+
+
+class OrderItem(Base):
+    """One line. Name and price are snapshots: an order must still read
+    correctly after the product is renamed, repriced, or deleted."""
+
+    __tablename__ = "order_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL")
+    )
+
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    category_slug: Mapped[str | None] = mapped_column(String(64))
+    unit_price_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    line_total_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    order: Mapped[Order] = relationship(back_populates="items")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
+        Index("ix_order_items_order", "order_id"),
     )

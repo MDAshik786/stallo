@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -23,6 +24,8 @@ from sqlalchemy.orm import Session
 
 from app.agent.types import ToolCall
 from app.models import AgentAction, Product
+from app.repositories.analytics import AnalyticsRepository
+from app.repositories.orders import OrderRepository
 from app.repositories.products import ProductRepository
 
 
@@ -53,6 +56,8 @@ class Executor:
         self._seller_id = seller_id
         self._run_id = run_id
         self._products = ProductRepository(db, seller_id)
+        self._orders = OrderRepository(db, seller_id)
+        self._analytics = AnalyticsRepository(db, seller_id)
 
     # ── audit log ────────────────────────────────────────────────────────
 
@@ -168,6 +173,70 @@ class Executor:
         self._db.commit()
         return {"deleted": snapshot}, False, None
 
+    # ── analytics ────────────────────────────────────────────────────────
+    #
+    # The model supplies filters only. It never writes SQL, never picks an
+    # ORDER BY, and never names a seller — AnalyticsRepository was constructed
+    # with the tenant before any of this ran.
+
+    def _t_query_revenue(self, args: dict):
+        report = self._analytics.revenue(
+            start_date=_as_date(args.get("start_date")),
+            end_date=_as_date(args.get("end_date")),
+            category_slug=args.get("category_slug"),
+            group_by=args.get("group_by") or "day",
+            comparison=args.get("comparison") or "none",
+        )
+        return (
+            {
+                "total_paise": report.total_paise,
+                "order_count": report.order_count,
+                "group_by": report.group_by,
+                "category_slug": report.category_slug,
+                "start_date": report.start_date.isoformat(),
+                "end_date": report.end_date.isoformat(),
+                "previous_total_paise": report.previous_total_paise,
+                "change_pct": report.change_pct,
+                "buckets": [
+                    {"label": b.label, "revenue_paise": b.revenue_paise, "orders": b.orders}
+                    for b in report.buckets
+                ],
+            },
+            False,
+            None,
+        )
+
+    def _t_query_product_sales(self, args: dict):
+        rows = self._analytics.product_sales(
+            start_date=_as_date(args.get("start_date")),
+            end_date=_as_date(args.get("end_date")),
+            category_slug=args.get("category_slug"),
+            sort=args.get("sort") or "quantity_desc",
+            limit=int(args.get("limit") or 10),
+        )
+        return (
+            {"products": [
+                {"name": r.name, "category_slug": r.category_slug,
+                 "quantity": r.quantity, "revenue_paise": r.revenue_paise}
+                for r in rows
+            ]},
+            False,
+            None,
+        )
+
+    def _t_query_orders(self, args: dict):
+        orders = self._orders.list(status=args.get("status"), limit=int(args.get("limit") or 10))
+        return (
+            {"orders": [
+                {"order_number": o.order_number, "customer_name": o.customer_name,
+                 "status": o.status, "total_paise": o.total_paise,
+                 "placed_at": o.placed_at.isoformat(), "items": len(o.items)}
+                for o in orders
+            ]},
+            False,
+            None,
+        )
+
     # ── audit log tools ──────────────────────────────────────────────────
 
     def _t_get_agent_action_history(self, args: dict):
@@ -224,6 +293,17 @@ class Executor:
         action.undone_at = func_now(self._db)
         self._db.commit()
         return {"undone": {"id": str(action.id), "tool": action.tool}}, False, None
+
+
+def _as_date(value: Any) -> date:
+    """Dates arrive as ISO strings from the model. A missing or unparseable one
+    is the caller's mistake, surfaced rather than silently defaulted."""
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"could not read {value!r} as a date (expected YYYY-MM-DD)") from exc
 
 
 def func_now(db: Session):

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
-from app.api.routes import agent, products
+from app.api.routes import agent, orders, products
 from app.config import settings
 
 _is_local = settings.stallo_env == "local"
@@ -25,6 +25,7 @@ app.add_middleware(
 
 app.include_router(products.router)
 app.include_router(agent.router)
+app.include_router(orders.router)
 
 
 @app.exception_handler(IntegrityError)

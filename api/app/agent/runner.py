@@ -118,21 +118,94 @@ def _advance(db: Session, run: AgentRun, seller_id: uuid.UUID,
     executor = Executor(db, seller_id, run.id)
     results = [{"tool": c.name, "result": executor.run(c)} for c in calls]
     run.status = "completed"
-    run.reply = text or _summarise(results)
+    data_tools = {"query_revenue", "query_product_sales", "query_orders",
+                  "get_agent_action_history"}
+    # For a data question the numbers are the answer; the model's prose
+    # restates them less accurately, so the summary wins.
+    if any(r["tool"] in data_tools for r in results):
+        run.reply = _summarise(results)
+    else:
+        run.reply = text or _summarise(results)
+    run.results = results
     run.messages = [*(run.messages or []), {"role": "assistant", "results": results}]
     db.commit()
     return run
 
 
+def _rupees(paise: int) -> str:
+    """Indian digit grouping: 1,54,646 rather than 154,646."""
+    whole = abs(int(paise)) // 100
+    text = str(whole)
+    if len(text) > 3:
+        head, tail = text[:-3], text[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        text = ",".join(groups) + "," + tail
+    return f"\u20b9{'-' if paise < 0 else ''}{text}"
+
+
 def _summarise(results: list[dict]) -> str:
+    """Answer in a sentence. A seller asked a question; "Done." is not an
+    answer, and neither is a chart with no words around it."""
     for entry in results:
-        result = entry["result"]
-        if entry["tool"] == "create_product" and result.get("name"):
-            return f"Created “{result['name']}” as a draft."
-        if entry["tool"] == "update_product" and result.get("name"):
-            return f"Updated “{result['name']}”."
+        tool, result = entry["tool"], entry["result"]
+
         if result.get("error"):
             return result["error"]
+
+        if tool == "create_product" and result.get("name"):
+            return f"Created \u201c{result['name']}\u201d as a draft."
+
+        if tool == "update_product" and result.get("name"):
+            return f"Updated \u201c{result['name']}\u201d."
+
+        if tool == "query_revenue":
+            scope = f" from {result['category_slug']}" if result.get("category_slug") else ""
+            line = (
+                f"{_rupees(result['total_paise'])}{scope} across "
+                f"{result['order_count']} orders, "
+                f"{result['start_date']} to {result['end_date']}."
+            )
+            change, previous = result.get("change_pct"), result.get("previous_total_paise")
+            if change is not None:
+                direction = "up" if change >= 0 else "down"
+                line += (f" That is {direction} {abs(change)}% on the previous "
+                         f"period ({_rupees(previous or 0)}).")
+            elif previous == 0:
+                line += " There is nothing in the previous period to compare against."
+            return line
+
+        if tool == "query_product_sales":
+            rows = result.get("products") or []
+            if not rows:
+                return "No sales in that period."
+            top = ", ".join(
+                f"{r['name']} ({r['quantity']} sold, {_rupees(r['revenue_paise'])})"
+                for r in rows[:3]
+            )
+            return f"Top sellers: {top}."
+
+        if tool == "query_orders":
+            rows = result.get("orders") or []
+            if not rows:
+                return "No orders match that."
+            listed = ", ".join(
+                f"{r['customer_name']} {_rupees(r['total_paise'])} ({r['status']})"
+                for r in rows[:5]
+            )
+            return f"{len(rows)} order(s): {listed}."
+
+        if tool == "get_agent_action_history":
+            actions = result.get("actions") or []
+            if not actions:
+                return "I have not changed anything yet."
+            return ("Recently: "
+                    + ", ".join(a["tool"].replace("_", " ") for a in actions[:5]) + ".")
+
     return "Done."
 
 

@@ -67,6 +67,8 @@ export type Suspension = {
   summary?: string;
 };
 
+export type ToolResult = { tool: string; result: Record<string, unknown> };
+
 export type AgentRun = {
   id: string;
   status: RunStatus;
@@ -74,6 +76,7 @@ export type AgentRun = {
   suspension: Suspension | null;
   reply: string | null;
   error: string | null;
+  results: ToolResult[] | null;
 };
 
 export type AgentAction = {
@@ -86,6 +89,39 @@ export type AgentAction = {
   undone: boolean;
   duration_ms: number | null;
   created_at: string;
+};
+
+export type Order = {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  status: "pending" | "paid" | "shipped" | "delivered" | "cancelled";
+  total_paise: number;
+  placed_at: string;
+  items: { name: string; quantity: number; unit_price_paise: number; line_total_paise: number }[];
+};
+
+export type OrderPage = { orders: Order[]; total: number };
+
+export type RevenueBucket = { label: string; revenue_paise: number; orders: number };
+
+export type Revenue = {
+  start_date: string;
+  end_date: string;
+  group_by: string;
+  category_slug: string | null;
+  total_paise: number;
+  order_count: number;
+  previous_total_paise: number | null;
+  change_pct: number | null;
+  buckets: RevenueBucket[];
+};
+
+export type ProductSales = {
+  name: string;
+  category_slug: string | null;
+  quantity: number;
+  revenue_paise: number;
 };
 
 export const api = {
@@ -106,6 +142,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
   listActions: (limit = 25) => request<AgentAction[]>(`/agent/actions?limit=${limit}`),
+
+  listOrders: (status?: string, limit = 25) =>
+    request<OrderPage>(`/orders?limit=${limit}${status ? `&status=${status}` : ""}`),
+  revenue: (days: number, groupBy: "day" | "week" | "month" | "category") =>
+    request<Revenue>(`/analytics/revenue?days=${days}&group_by=${groupBy}`),
+  productSales: (days: number, limit = 6) =>
+    request<ProductSales[]>(`/analytics/products?days=${days}&limit=${limit}`),
 };
 
 export function formatPaise(paise: number): string {

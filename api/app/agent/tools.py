@@ -147,6 +147,11 @@ class QueryProductSales(BaseModel):
     limit: int = Field(10, ge=1, le=50)
 
 
+class QueryOrders(BaseModel):
+    status: Literal["pending", "paid", "shipped", "delivered", "cancelled"] | None = None
+    limit: int = Field(10, ge=1, le=50)
+
+
 class GetAgentActionHistory(BaseModel):
     limit: int = Field(10, ge=1, le=50)
 
@@ -214,6 +219,7 @@ REGISTRY: dict[str, tuple[type[BaseModel], Exposure]] = {
     "preview_product":          (PreviewProduct,        Exposure.READ),
     "query_revenue":            (QueryRevenue,          Exposure.READ),
     "query_product_sales":      (QueryProductSales,     Exposure.READ),
+    "query_orders":             (QueryOrders,           Exposure.READ),
     "get_agent_action_history": (GetAgentActionHistory, Exposure.READ),
 
     "create_product":           (CreateProduct,         Exposure.WRITE),
@@ -239,6 +245,7 @@ _DESCRIPTIONS = {
     "preview_product": "Render how a draft product will look in the storefront.",
     "query_revenue": "Revenue over a date range, optionally by category, optionally compared to a prior period.",
     "query_product_sales": "Per-product sales over a date range, sorted by quantity or revenue.",
+    "query_orders": "Recent orders for this store, newest first, optionally filtered by status.",
     "get_agent_action_history": "Recent actions taken by the agent on this store, newest first.",
     "create_product": "Create a new product as a draft. Drafts are not visible to shoppers.",
     "update_product": "Update fields on an existing draft product.",

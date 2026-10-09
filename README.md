@@ -34,6 +34,23 @@ A seller types what they want instead of filling a form.
       -> agent pauses: "This will publish Jasmine Garland. Approve?"
       [Approve] -> live in the storefront
 
+It also answers questions about the business:
+
+    "how did flowers do this month vs last?"
+      -> ₹45,067 from flowers across 28 orders, 2026-09-01 to 2026-10-09.
+         That is down 16.4% on the previous period (₹53,894).
+      -> plus the chart, inline
+
+The model never writes SQL. It picks a typed query and its filters;
+`AnalyticsRepository` builds the statement and was constructed with the
+tenant before the model ran. There is no free-text parameter, and the caller
+cannot supply an ORDER BY — the builder owns those. A prompt injection can at
+worst produce a wrong-but-authorised query, never a cross-tenant read.
+
+It also declines to guess a date it was not given. "How did we do during
+Diwali" is answered with a question, because festival dates move every year
+and a confident wrong window is worse than asking.
+
 Clarification and approval are the same mechanism — a tool that suspends the
 run. The run is a row in Postgres, not React state, so a pending question
 survives a refresh, a closed tab, or tomorrow morning.
@@ -59,7 +76,13 @@ Measured on `qwen3:8b` running locally via Ollama:
 | baseline | 59.5% | 92.0% | 4 |
 | longer system prompt | 57.1% | 87.5% | 5 |
 | + deterministic guards | 69.0% | 93.1% | 1 |
-| + numeric grounding | 71.4% | 93.3% | **0** |
+| + numeric grounding | 71.4% | 93.3% | 0 |
+| + 17th tool (`query_orders`) | 71.4% | 93.3% | 2 |
+| + name & date grounding | **76.2%** | **93.8%** | **0** |
+
+Adding a seventeenth tool cost two safety violations before anything else
+changed — more options, more confusion for a small model. Worth knowing
+before adding the eighteenth.
 
 The longer prompt scoring *worse* is why `app/agent/guards.py` exists. An
 invariant that must hold is code, not a sentence in a system prompt. Guards
@@ -88,6 +111,7 @@ Gemini behind one interface; nothing else in the suite knows which ran.
 | Web | Next.js App Router, TypeScript, Tailwind v4, React Query |
 | API | FastAPI, SQLAlchemy 2, Alembic, Pydantic v2 |
 | Agent | Ollama (local, free) by default; Anthropic and Gemini adapters included |
+| Charts | inline SVG, no chart library; series colours validated per surface |
 | Data | Postgres 18, UUIDv7 primary keys generated in application code |
 
 Every product query is scoped to one seller in the repository layer, where
@@ -100,7 +124,8 @@ no call site that can forget it.
     docker compose up -d --wait
     cd api && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
     cd api && .venv/bin/alembic upgrade head
-    cd api && .venv/bin/python scripts/seed.py     # prints a SELLER_ID
+    cd api && .venv/bin/python scripts/seed.py         # prints a SELLER_ID
+    cd api && .venv/bin/python scripts/seed_orders.py  # ~7 months of orders
     cd web && npm install
 
 Put the printed `SELLER_ID` in `web/.env.local`:
@@ -159,7 +184,8 @@ Then talk to it at http://localhost:3000/agent
 ## Known gaps
 
 - Authentication is an unverified header (see status note above)
-- Variant, image, and analytics tools are declared but not implemented;
-  calling one returns a clear "not implemented" rather than failing
+- Variant and image tools are declared but not implemented; calling one
+  returns a clear "not implemented" rather than failing
+- Orders are seeded, not placed — there is no checkout
 - Responses are not streamed — a turn takes a few seconds on local hardware
 - `/orders` and `/analytics` are navigation placeholders

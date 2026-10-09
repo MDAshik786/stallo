@@ -3,19 +3,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ColumnChart } from "@/components/charts";
 import { SuspensionCard } from "@/components/suspension-card";
-import { api, type AgentRun } from "@/lib/api";
+import { api, type AgentRun, type RevenueBucket } from "@/lib/api";
 
 type Turn =
   | { kind: "seller"; text: string }
   | { kind: "agent"; text: string }
+  | { kind: "chart"; result: Record<string, unknown> }
   | { kind: "run"; run: AgentRun };
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function shortLabel(label: string) {
+  const [y, m, d] = label.split("-");
+  if (d) return `${d} ${MONTHS[Number(m) - 1]}`;
+  return `${MONTHS[Number(m) - 1]} ${y.slice(2)}`;
+}
 
 const EXAMPLES = [
   "add a rose bouquet for ₹899",
   "add a jasmine garland",
-  "publish it",
-  "what did you change?",
+  "how did flowers do this month vs last?",
+  "which products sold the most?",
 ];
 
 export default function AgentPage() {
@@ -33,6 +43,8 @@ export default function AgentPage() {
       const without = prev.filter((t) => !(t.kind === "run" && t.run.id === run.id));
       const next: Turn[] = [...without, { kind: "run", run }];
       if (run.reply) next.push({ kind: "agent", text: run.reply });
+      const chart = (run.results ?? []).find((r) => r.tool === "query_revenue");
+      if (chart) next.push({ kind: "chart", result: chart.result });
       if (run.error) next.push({ kind: "agent", text: run.error });
       return next;
     });
@@ -111,6 +123,22 @@ export default function AgentPage() {
                   <p className="max-w-[80%] rounded-2xl rounded-bl-sm border border-border bg-surface px-3.5 py-2 text-[13px]">
                     {turn.text}
                   </p>
+                </div>
+              );
+            }
+            if (turn.kind === "chart") {
+              const buckets = (turn.result.buckets ?? []) as RevenueBucket[];
+              if (buckets.length < 2) return null;
+              return (
+                <div key={i} className="max-w-[92%]">
+                  <ColumnChart
+                    title="Revenue"
+                    data={buckets.map((b) => ({
+                      label: shortLabel(b.label),
+                      value: b.revenue_paise,
+                      sub: `${b.orders} orders`,
+                    }))}
+                  />
                 </div>
               );
             }

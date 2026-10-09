@@ -98,6 +98,37 @@ def _grounded(value: Any, utterance: str) -> bool:
     return bool(candidates & _digits(utterance))
 
 
+
+# A name is grounded when it reuses a word the seller actually typed. These
+# carry no information on their own, so a "name" made only of them is a
+# placeholder the model invented.
+_FILLER = {
+    "a", "an", "the", "add", "new", "create", "product", "item", "thing",
+    "please", "for", "to", "my", "store", "some", "this", "that", "unnamed",
+}
+
+
+def _name_grounded(name: Any, utterance: str) -> bool:
+    words = {w for w in re.findall(r"[a-z0-9]+", str(name).lower()) if w not in _FILLER}
+    if not words:
+        return False
+    return bool(words & set(re.findall(r"[a-z0-9]+", utterance.lower())))
+
+
+# The agent may choose dates only when the seller gave a resolvable time
+# reference. "last three months" resolves; "during Diwali" does not — festival
+# dates move every year, and a confident guess is worse than a question.
+_TEMPORAL = re.compile(
+    r"\b(today|yesterday|tonight|this (week|month|quarter|year)"
+    r"|last (week|month|quarter|year)|past|previous|recent|so far|to date|ytd"
+    r"|since|between|from|\d{4}-\d{2}-\d{2}|(19|20)\d{2}"
+    r"|\d+\s*(day|days|week|weeks|month|months|year|years)"
+    r"|one|two|three|four|five|six|seven|eight|nine|ten|twelve"
+    r"|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?"
+    r"|sep(tember)?|oct(ober)?|nov(ember)?|dec(ember)?|q[1-4])\b",
+    re.IGNORECASE,
+)
+
 # Required and ungrounded -> ask. Optional and ungrounded -> drop it and use
 # the default. Asking "how many are in stock?" when the seller only said "add a
 # rose bouquet for Rs899" is noise; inventing a price is a real hazard.
@@ -137,7 +168,8 @@ def guard(
 
         # 3. Creating a product needs a name and a price the seller actually gave.
         if call.name == "create_product":
-            if not str(args.get("name") or "").strip():
+            name = str(args.get("name") or "").strip()
+            if not name or (utterance and not _name_grounded(name, utterance)):
                 out.append(_choice("name", "What should this product be called?"))
                 continue
             amount = _amount(args.get("price"))
@@ -198,7 +230,19 @@ def guard(
                 args = {k: v for k, v in args.items() if k not in invented}
                 call = ToolCall(call.name, args)
 
-        # 7. Never act on an id that isn't in front of us.
+        # 7. Dates need a time reference the seller actually gave.
+        if utterance and call.name in ("query_revenue", "query_product_sales") and (
+            args.get("start_date") or args.get("end_date")
+        ):
+            if not _TEMPORAL.search(utterance):
+                out.append(_choice(
+                    "date_range",
+                    "Which dates should I look at? Festival and event dates move "
+                    "every year, so I'd rather not guess.",
+                ))
+                continue
+
+        # 8. Never act on an id that isn't in front of us.
         bad_id = next(
             (f for f in _ID_FIELDS if args.get(f) and str(args[f]) not in known),
             None,
@@ -209,7 +253,7 @@ def guard(
 
         out.append(call)
 
-    # 8. Collapse a duplicate suspension — one question at a time.
+    # 9. Collapse a duplicate suspension — one question at a time.
     deduped: list[ToolCall] = []
     for call in out:
         if call.name in ("request_choice", "request_confirmation", "refuse") and deduped:
