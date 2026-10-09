@@ -50,6 +50,20 @@ evil=$(curl -s -o /dev/null -D - --max-time 60 -X OPTIONS "$API/products" \
 check "evil origin blocked"         "0" "$evil"
 
 echo
+echo "── orders & analytics ───────────────────────────"
+check "orders reachable"          200 "$(code -H "X-Seller-Id: $SELLER" $API/orders)"
+check "orders need auth"          401 "$(code $API/orders)"
+check "analytics reachable"       200 "$(code -H "X-Seller-Id: $SELLER" "$API/analytics/revenue?days=90")"
+check "analytics needs auth"      401 "$(code $API/analytics/revenue)"
+check "bad group_by rejected"     422 "$(code -H "X-Seller-Id: $SELLER" "$API/analytics/revenue?group_by=drop_table")"
+check "bad sort rejected"         422 "$(code -H "X-Seller-Id: $SELLER" "$API/analytics/products?sort=1;--")"
+curl -s --max-time 60 -H "X-Seller-Id: $SELLER" "$API/analytics/revenue?days=90" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(f\"  revenue 90d: ₹{d['total_paise']/100:,.0f} over {d['order_count']} orders\")
+"
+
+echo
 echo "── agent ────────────────────────────────────────"
 check "audit log reachable"        200 "$(code -H "X-Seller-Id: $SELLER" $API/agent/actions)"
 check "audit log needs auth"       401 "$(code $API/agent/actions)"
