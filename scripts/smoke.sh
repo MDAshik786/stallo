@@ -50,6 +50,25 @@ evil=$(curl -s -o /dev/null -D - --max-time 60 -X OPTIONS "$API/products" \
 check "evil origin blocked"         "0" "$evil"
 
 echo
+echo "── agent ────────────────────────────────────────"
+check "audit log reachable"        200 "$(code -H "X-Seller-Id: $SELLER" $API/agent/actions)"
+check "audit log needs auth"       401 "$(code $API/agent/actions)"
+run=$(curl -s --max-time 150 -X POST "$API/agent/runs" \
+  -H "X-Seller-Id: $SELLER" -H "Content-Type: application/json" \
+  -d '{"utterance":"add a rose bouquet for 899"}')
+printf '%s' "$run" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print('  could not parse agent response'); raise SystemExit
+print(f\"  status: {d.get('status')}\")
+for key in ('reply', 'error'):
+    if d.get(key):
+        print(f'    {d[key][:88]}')
+"
+
+echo
 echo "── production hardening ─────────────────────────"
 check "/docs hidden"                404 "$(code $API/docs)"
 check "/openapi.json hidden"        404 "$(code $API/openapi.json)"
