@@ -98,8 +98,11 @@ def _grounded(value: Any, utterance: str) -> bool:
     return bool(candidates & _digits(utterance))
 
 
-# fields whose value must be traceable to something the seller actually typed
-_MUST_BE_GROUNDED = ("price", "stock_quantity")
+# Required and ungrounded -> ask. Optional and ungrounded -> drop it and use
+# the default. Asking "how many are in stock?" when the seller only said "add a
+# rose bouquet for Rs899" is noise; inventing a price is a real hazard.
+_ASK_IF_UNGROUNDED = ("price",)
+_DROP_IF_UNGROUNDED = ("stock_quantity", "description")
 
 
 def guard(
@@ -175,21 +178,24 @@ def guard(
         # 6. Numbers must come from the seller, not from the model's imagination.
         if utterance:
             ungrounded = next(
-                (f for f in _MUST_BE_GROUNDED
+                (f for f in _ASK_IF_UNGROUNDED
                  if f in args and args[f] is not None and not _grounded(args[f], utterance)),
                 None,
             )
             if ungrounded:
-                question = ("What price should I set?" if ungrounded == "price"
-                            else "How many are in stock?")
-                out.append(_choice(ungrounded, question))
+                out.append(_choice(ungrounded, "What price should I set?"))
                 continue
 
-            # A description the seller never gave is removed rather than
-            # refused — losing invented copy costs nothing, and the rest of
-            # the call is still what they asked for.
-            if args.get("description") and args["description"].lower() not in utterance.lower():
-                args = {k: v for k, v in args.items() if k != "description"}
+            invented = {
+                f for f in _DROP_IF_UNGROUNDED
+                if args.get(f) is not None and not (
+                    _grounded(args[f], utterance)
+                    if f != "description"
+                    else str(args[f]).lower() in utterance.lower()
+                )
+            }
+            if invented:
+                args = {k: v for k, v in args.items() if k not in invented}
                 call = ToolCall(call.name, args)
 
         # 7. Never act on an id that isn't in front of us.
