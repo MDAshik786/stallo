@@ -164,14 +164,60 @@ def call_ollama(system: str, user_text: str, tools: list[dict], model: str,
     return calls
 
 
+# ── Groq (free tier, hosted) ─────────────────────────────────────────────
+
+def call_groq(system: str, user_text: str, tools: list[dict], model: str,
+              effort: str) -> list[ToolCall]:
+    """Same OpenAI-shaped tool schema as Ollama, so the golden set is
+    unchanged — only the endpoint differs."""
+    import json as _json
+
+    import httpx
+
+    r = httpx.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        timeout=90,
+        headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"},
+        json={
+            "model": model,
+            "temperature": 0,
+            "tool_choice": "auto",
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user_text}],
+            "tools": [
+                {"type": "function", "function": {
+                    "name": t["name"], "description": t["description"],
+                    "parameters": t["input_schema"]}}
+                for t in tools
+            ],
+        },
+    )
+    r.raise_for_status()
+    message = (r.json().get("choices") or [{}])[0].get("message", {})
+
+    calls: list[ToolCall] = []
+    for tc in message.get("tool_calls") or []:
+        fn = tc.get("function", {})
+        args = fn.get("arguments", {})
+        if isinstance(args, str):
+            try:
+                args = _json.loads(args)
+            except _json.JSONDecodeError:
+                args = {}
+        calls.append(ToolCall(fn.get("name", ""), args or {}))
+    return calls
+
+
 PROVIDERS: dict[str, Callable[..., list[ToolCall]]] = {
     "anthropic": call_anthropic,
     "gemini": call_gemini,
     "ollama": call_ollama,
+    "groq": call_groq,
 }
 
 DEFAULT_MODEL = {
     "anthropic": "claude-opus-5",
     "gemini": "gemini-3.6-flash",
     "ollama": "qwen3:8b",
+    "groq": "llama-3.3-70b-versatile",
 }

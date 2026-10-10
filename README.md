@@ -14,10 +14,11 @@ want; shoppers see and control what the store knows about them.
 > trusts an `X-Seller-Id` header without verifying it, so any caller can claim
 > any seller. Seed data only; not suitable for real data until replaced.
 
-> **The assistant only runs locally.** It uses a local model via Ollama, so the
-> hosted demo has no model to reach and says so when you try. The storefront,
-> catalogue and product form all work there; for the agent, clone and run it
-> locally — three commands, below.
+> **The assistant uses a hosted free-tier model in the demo** and a local one
+> in development. A 5.2 GB model cannot live in a 512 MB container, so
+> production calls Groq; locally it calls Ollama so the eval loop is free and
+> unlimited. Both speak the same tool schema, so the guards and the golden set
+> are identical either way.
 
 Both API and database run on free tiers and sleep after inactivity, so the
 first request after an idle period can take up to a minute.
@@ -112,7 +113,7 @@ Gemini behind one interface; nothing else in the suite knows which ran.
 |---|---|
 | Web | Next.js App Router, TypeScript, Tailwind v4, React Query |
 | API | FastAPI, SQLAlchemy 2, Alembic, Pydantic v2 |
-| Agent | Ollama (local, free) by default; Anthropic and Gemini adapters included |
+| Agent | Ollama locally, Groq in the demo; Anthropic and Gemini adapters included |
 | Charts | inline SVG, no chart library; series colours validated per surface |
 | Data | Postgres 18, UUIDv7 primary keys generated in application code |
 
