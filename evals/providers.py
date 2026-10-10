@@ -174,25 +174,29 @@ def call_groq(system: str, user_text: str, tools: list[dict], model: str,
 
     import httpx
 
-    r = httpx.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        timeout=90,
-        headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"},
-        json={
-            "model": model,
-            "temperature": 0,
-            "tool_choice": "auto",
-            "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": user_text}],
-            "tools": [
-                {"type": "function", "function": {
-                    "name": t["name"], "description": t["description"],
-                    "parameters": t["input_schema"]}}
-                for t in tools
-            ],
-        },
-    )
-    r.raise_for_status()
+    def _post():
+        r = httpx.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            timeout=90,
+            headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"},
+            json={
+                "model": model,
+                "temperature": 0,
+                "tool_choice": "auto",
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": user_text}],
+                "tools": [
+                    {"type": "function", "function": {
+                        "name": t["name"], "description": t["description"],
+                        "parameters": t["input_schema"]}}
+                    for t in tools
+                ],
+            },
+        )
+        r.raise_for_status()
+        return r
+
+    r = _with_retry(_post, attempts=6, base=2.0)
     message = (r.json().get("choices") or [{}])[0].get("message", {})
 
     calls: list[ToolCall] = []
@@ -219,5 +223,5 @@ DEFAULT_MODEL = {
     "anthropic": "claude-opus-5",
     "gemini": "gemini-3.6-flash",
     "ollama": "qwen3:8b",
-    "groq": "llama-3.3-70b-versatile",
+    "groq": "openai/gpt-oss-120b",
 }

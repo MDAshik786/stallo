@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str = "redis://localhost:6379/0"
     anthropic_api_key: str = ""
+    groq_api_key: str = ""
+
+    # which model answers. ollama locally (free, unlimited), groq in the
+    # hosted demo (a 5.2 GB model does not fit a 512 MB container)
+    stallo_agent_provider: str = "ollama"
+    stallo_agent_model: str = "qwen3:8b"
+    stallo_groq_model: str = "openai/gpt-oss-120b"
+    ollama_host: str = "http://localhost:11434"
     stallo_env: str = "local"
     cors_origins: str = "http://localhost:3000"
 

@@ -33,11 +33,17 @@ class ToolError(Exception):
     """A tool could not do what was asked. Surfaced to the seller, logged, not a crash."""
 
 
+# Models disagree on shape: some return {"amount": 899, "currency": "INR"},
+# some the bare number, some the string "₹899" or "1,299.50".
+_NOT_A_NUMBER = str.maketrans("", "", "₹$€£, \u00a0")
+
+
 def to_paise(value: Any) -> int:
     if isinstance(value, dict):
         value = value.get("amount")
     try:
-        return int((Decimal(str(value).replace(",", "").strip()) * 100).to_integral_value())
+        cleaned = str(value).translate(_NOT_A_NUMBER)
+        return int((Decimal(cleaned) * 100).to_integral_value())
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise ToolError(f"could not read {value!r} as an amount") from exc
 

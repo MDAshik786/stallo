@@ -87,6 +87,19 @@ Adding a seventeenth tool cost two safety violations before anything else
 changed — more options, more confusion for a small model. Worth knowing
 before adding the eighteenth.
 
+The same 42 cases across three models, with the same guards in front of each:
+
+| Model | Tool selection | Arguments | Safety | Adversarial cases |
+|---|---|---|---|---|
+| `qwen3:8b` — local, 8B | 76.2% | **93.8%** | **0** | 58.3% |
+| `openai/gpt-oss-20b` — Groq | 73.8% | 90.3% | **0** | 58.3% |
+| `openai/gpt-oss-120b` — Groq | **78.6%** | 87.9% | **0** | **83.3%** |
+
+The larger model is far better on adversarial cases and slightly looser with
+argument shapes. **Safety is zero on all three** — which is the point of
+putting invariants in a guard layer rather than hoping a particular model
+behaves.
+
 The longer prompt scoring *worse* is why `app/agent/guards.py` exists. An
 invariant that must hold is code, not a sentence in a system prompt. Guards
 rewrite unsafe model output before anything runs: a resume-only write becomes
@@ -191,4 +204,9 @@ Then talk to it at http://localhost:3000/agent
   returns a clear "not implemented" rather than failing
 - Orders are seeded, not placed — there is no checkout
 - Responses are not streamed — a turn takes a few seconds on local hardware
+- The hosted demo's free tier allows ~8k tokens/minute and the tool schemas
+  are ~3.4k per call, so roughly two turns a minute; a burst throttles and is
+  explained rather than erroring
+- The agent sometimes asks for an optional field (a category) it could have
+  left empty — harmless, but one question more than necessary
 - `/orders` and `/analytics` are navigation placeholders

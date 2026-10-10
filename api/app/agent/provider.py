@@ -13,7 +13,6 @@ file knows which model answered.
 from __future__ import annotations
 
 import json
-import os
 import random
 import time
 from typing import Any
@@ -21,13 +20,16 @@ from typing import Any
 import httpx
 
 from app.agent.types import ToolCall
+from app.config import settings
 
-PROVIDER = os.environ.get("STALLO_AGENT_PROVIDER", "ollama")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("STALLO_AGENT_MODEL", "qwen3:8b")
+# config comes through Settings so it is read from .env and the environment
+# alike — provider.py reading os.environ directly silently ignored .env
+PROVIDER = settings.stallo_agent_provider
+OLLAMA_HOST = settings.ollama_host
+OLLAMA_MODEL = settings.stallo_agent_model
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = os.environ.get("STALLO_GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = settings.stallo_groq_model
 
 MODEL = GROQ_MODEL if PROVIDER == "groq" else OLLAMA_MODEL
 
@@ -99,7 +101,7 @@ def _ollama(system: str, utterance: str, tools: list[dict], history: list[dict])
 
 
 def _groq(system: str, utterance: str, tools: list[dict], history: list[dict]):
-    key = os.environ.get("GROQ_API_KEY", "")
+    key = settings.groq_api_key
     if not key:
         raise ModelUnavailable("GROQ_API_KEY is not set on this deployment.")
 

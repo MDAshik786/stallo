@@ -45,6 +45,18 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9. ]+", " ", str(s).lower()).strip()
 
 
+def _money(value: Any) -> Decimal | None:
+    """Numeric value of a money field however the model wrote it."""
+    if isinstance(value, dict):
+        value = value.get("amount")
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value).translate(str.maketrans("", "", "₹$€£, \u00a0")))
+    except (InvalidOperation, ValueError):
+        return None
+
+
 def _tokens(s: str) -> set[str]:
     return {t for t in _norm(s).split() if t}
 
@@ -97,6 +109,16 @@ def _match(expected: Any, actual: Any, path: str, errors: list[str]) -> None:
         return
 
     if isinstance(expected, dict):
+        # Money is written as {"amount": ..., "currency": ...} but models also
+        # return "₹899" or a bare number. The executor normalises all three, so
+        # the suite scores the value, not the shape it arrived in — otherwise
+        # it measures JSON style rather than whether the agent got it right.
+        if "amount" in expected and not isinstance(actual, dict):
+            want, got = _money(expected.get("amount")), _money(actual)
+            if want is None or got is None or want != got:
+                errors.append(f"{path}: expected {expected.get('amount')}, got {actual!r}")
+            return
+
         if not isinstance(actual, dict):
             errors.append(f"{path}: expected an object, got {actual!r}")
             return
@@ -163,7 +185,7 @@ def fetch_all():
         except Exception as exc:                       # noqa: BLE001 — reported, not swallowed
             return case["id"], [], f"{type(exc).__name__}: {exc}"
 
-    with ThreadPoolExecutor(max_workers=1 if os.environ.get("STALLO_EVAL_PROVIDER") == "ollama" else 4) as pool:
+    with ThreadPoolExecutor(max_workers=1 if os.environ.get("STALLO_EVAL_PROVIDER") in ("ollama", "groq") else 4) as pool:
         for cid, calls, err in pool.map(one, CASES):
             case = next(c for c in CASES if c["id"] == cid)
             RESULTS[cid] = Result(case_id=cid, group=case["group"], calls=calls, error=err)

@@ -136,6 +136,22 @@ _ASK_IF_UNGROUNDED = ("price",)
 _DROP_IF_UNGROUNDED = ("stock_quantity", "description")
 
 
+# The seller sees these questions, so we write them. A model asked
+# "What price (in paise) should the Lavender Bunch be listed at?" — paise is
+# an internal storage unit and no seller thinks in it.
+_OUR_WORDING = {
+    "name": "What should this product be called?",
+    "price": "What price should I set?",
+    "stock_quantity": "How many are in stock?",
+    "product_id": "Which product do you mean?",
+    "variant_id": "Which one do you mean?",
+    "date_range": (
+        "Which dates should I look at? Festival and event dates move every "
+        "year, so I'd rather not guess."
+    ),
+}
+
+
 def guard(
     calls: list[ToolCall],
     context: dict[str, Any] | None = None,
@@ -251,9 +267,15 @@ def guard(
             out.append(_choice(bad_id, "Which one do you mean?"))
             continue
 
+        # 9. We own the wording of any question the seller reads.
+        if call.name == "request_choice":
+            better = _OUR_WORDING.get(str(args.get("field", "")))
+            if better and args.get("prompt") != better:
+                call = ToolCall(call.name, {**args, "prompt": better})
+
         out.append(call)
 
-    # 9. Collapse a duplicate suspension — one question at a time.
+    # 10. Collapse a duplicate suspension — one question at a time.
     deduped: list[ToolCall] = []
     for call in out:
         if call.name in ("request_choice", "request_confirmation", "refuse") and deduped:
